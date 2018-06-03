@@ -2,16 +2,33 @@ cmake_minimum_required(VERSION 2.8.3)
 project(planning_ros_utils)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wno-deprecated-declarations")
-find_package(catkin REQUIRED COMPONENTS rviz roscpp)
-find_package(catkin_simple REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+    rviz
+    roscpp
+    motion_primitive_library
+    planning_ros_msgs)
+#find_package(catkin_simple REQUIRED)
 find_package(cmake_modules)
 find_package(Eigen3 REQUIRED)
 FIND_PACKAGE(VTK REQUIRED)
-FIND_PACKAGE(motion_primitive_library REQUIRED)
-include_directories(${EIGEN3_INCLUDE_DIRS} ${MOTION_PRIMITIVE_LIBRARY_INCLUDE_DIRS})
+include_directories(${EIGEN3_INCLUDE_DIRS} ${MOTION_PRIMITIVE_LIBRARY_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS} include)
 
+FIND_PACKAGE(PCL 1.7 REQUIRED)
+if(NOT "${PCL_LIBRARIES}" STREQUAL "")
+  list(REMOVE_ITEM PCL_LIBRARIES "vtkproj4")
+endif()
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 add_definitions(-DQT_NO_KEYWORDS)
+
+catkin_package(
+    DEPENDS EIGEN3
+    CATKIN_DEPENDS
+    INCLUDE_DIRS include
+    LIBRARIES voxel_grid planning_rviz_plugins
+    )
 
 ## This setting causes Qt's "MOC" generation to happen automatically.
 ## this does not moc things in include!!!!!!! only in src
@@ -28,18 +45,17 @@ else()
   set(QT_LIBRARIES Qt5::Widgets)
 endif()
 
-catkin_simple()
-
 if(NOT VTK_FOUND)
   set(DEFAULT FALSE)
   set(REASON "VTK was not found.")
   message("VTK was not found")
 else(NOT VTK_FOUND)
   include(${VTK_USE_FILE})
-  cs_add_executable(mesh_sampling src/planning_ros_utils/mesh_sampling.cpp)
+  add_executable(mesh_sampling src/planning_ros_utils/mesh_sampling.cpp)
+  target_link_libraries(mesh_sampling ${VTK_LIBRARIES} ${PCL_LIBRARIES} ${catkin_LIBRARIES})
 endif(NOT VTK_FOUND)
 
-cs_add_library(voxel_grid src/planning_ros_utils/voxel_grid.cpp)
+add_library(voxel_grid src/planning_ros_utils/voxel_grid.cpp)
 
 set(SOURCE_FILES
   src/planning_rviz_plugins/bound_visual.cpp
@@ -54,9 +70,16 @@ set(SOURCE_FILES
   src/planning_ros_utils/primitive_ros_utils.cpp
   ${MOC_FILES})
 
-cs_add_library(planning_rviz_plugins ${SOURCE_FILES})
+add_library(planning_rviz_plugins ${SOURCE_FILES})
 target_link_libraries(planning_rviz_plugins ${QT_LIBRARIES} ${catkin_LIBRARIES} ${rviz_DEFAULT_PLUGIN_LIBRARIES} ${MOTION_PRIMITIVE_LIBRARY_LIBRARIES})
 
-cs_install()
+install(FILES "${PROJECT_NAME}Config.cmake" "${PROJECT_NAME}ConfigVersion.cmake"
+  DESTINATION "share/${PROJECT_NAME}/cmake")
 
-cs_export()
+install(TARGETS voxel_grid planning_rviz_plugins
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib)
+
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION include/${PROJECT_NAME})

@@ -9,12 +9,12 @@
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>catkin_simple</build_depend>
 
-  <depend>roscpp</depend>
-  <depend>rosbag</depend>
-  <depend>motion_primitive_library</depend>
-  <depend>decomp_ros_msgs</depend>
-  <depend>decomp_ros_utils</depend>
-  <depend>planning_ros_msgs</depend>
-  <depend>planning_ros_utils</depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>rosbag</build_depend>
+  <build_depend>motion_primitive_library</build_depend>
+  <build_depend>decomp_ros_msgs</build_depend>
+  <build_depend>decomp_ros_utils</build_depend>
+  <build_depend>planning_ros_msgs</build_depend>
+  <build_depend>planning_ros_utils</build_depend>
 
 </package>
