@@ -1,4 +1,5 @@
 #include "bag_reader.hpp"
+#include <planning_ros_utils/voxel_grid.h>
 #include <ros/ros.h>
 #include <planning_ros_msgs/VoxelMap.h>
 #include <planning_ros_utils/data_ros_utils.h>
@@ -6,8 +7,63 @@
 #include <motion_primitive_library/primitive/poly_solver.h>
 #include <motion_primitive_library/planner/mp_map_util.h>
 
-using namespace MPL;
+#include <iarc7_msgs/ObstacleArray.h>
 
+void generateVoxelMap(planning_ros_msgs::VoxelMap& voxel_map,
+                      const iarc7_msgs::ObstacleArray& obstacles)
+{
+    sensor_msgs::PointCloud cloud;
+
+    // Generate cloud from obstacle data
+    ROS_INFO("Number of obstacles: [%zu]", obstacles.obstacles.size());
+    cloud.header.stamp = ros::Time::now();
+    cloud.header.frame_id = "cloud";
+    cloud.channels.resize(1);
+
+    Vec3f voxel_map_origin;
+    voxel_map_origin(0) = voxel_map.origin.x;
+    voxel_map_origin(1) = voxel_map.origin.y;
+    voxel_map_origin(2) = voxel_map.origin.z;
+
+    ROS_INFO("Mapping obstacles to the cloud");
+    for (auto &obstacle : obstacles.obstacles) {
+        // Map each obstacle to the cloud
+
+        float pipe_radius = obstacle.pipe_radius;
+        float pipe_height = obstacle.pipe_height;
+        float pipe_x = obstacle.odom.pose.pose.position.x;
+        float pipe_y = obstacle.odom.pose.pose.position.y;
+        float px, py, pz;
+        for (pz = voxel_map_origin(2); pz <= pipe_height; pz += 0.005) {
+            for (float theta = 0; theta < 2*M_PI; theta += 0.05) {
+                for (float r = voxel_map.resolution; r < pipe_radius; r += voxel_map.resolution) {
+                    px = r*cos(theta) + pipe_x + voxel_map_origin(0);
+                    py = r*sin(theta) + pipe_y + voxel_map_origin(1);
+                    geometry_msgs::Point32 point;
+                    point.x = px;
+                    point.y = py;
+                    point.z = pz;
+                    cloud.points.push_back(point);
+                }
+            }
+        }
+    }
+
+    vec_Vec3f pts = cloud_to_vec(cloud);
+
+    Vec3f voxel_map_dim;
+    voxel_map_dim(0) = voxel_map.dim.x * voxel_map.resolution;
+    voxel_map_dim(1) = voxel_map.dim.y * voxel_map.resolution;
+    voxel_map_dim(2) = voxel_map.dim.z * voxel_map.resolution;
+
+    std::unique_ptr<VoxelGrid> voxel_grid (new VoxelGrid(voxel_map_origin,
+                                                         voxel_map_dim,
+                                                         voxel_map.resolution));
+    voxel_grid->addCloud(pts);
+
+    voxel_map = voxel_grid->getMap();
+    voxel_map.header = cloud.header;
+}
 
 void setMap(std::shared_ptr<MPL::VoxelMapUtil>& map_util, const planning_ros_msgs::VoxelMap& msg) {
   Vec3f ori(msg.origin.x, msg.origin.y, msg.origin.z);
@@ -53,22 +109,47 @@ int main(int argc, char ** argv){
   std_msgs::Header header;
   header.frame_id = std::string("map");
 
-  //Read map from bag file
-  std::string file_name, topic_name;
-  nh.param("file", file_name, std::string("voxel_map"));
-  nh.param("topic", topic_name, std::string("voxel_map"));
-  planning_ros_msgs::VoxelMap map = read_bag<planning_ros_msgs::VoxelMap>(file_name, topic_name, 0).back();
+  planning_ros_msgs::VoxelMap map;
+  map.resolution = 0.1;
+  map.origin.x = 0.0;
+  map.origin.y = 0.0;
+  map.origin.z = 0.0;
+  map.dim.x = 179.0;
+  map.dim.y = 179.0;
+  map.dim.z = 39.0;
+  map.data.resize(map.dim.x * map.dim.y * map.dim.z);
+  for (auto& x : map.data) {
+      x = 0;
+  }
 
+  //iarc7_msgs::ObstacleArray obstacles;
+
+  //iarc7_msgs::Obstacle new_obstacle;
+  //new_obstacle.pipe_height = 2.0;
+  //new_obstacle.pipe_radius = 1.0;
+  //new_obstacle.odom.pose.pose.position.x = 9;
+  //new_obstacle.odom.pose.pose.position.y = 11;
+  //new_obstacle.odom.pose.pose.position.z = 0;
+  //obstacles.obstacles.push_back(new_obstacle);
+
+  //for (double i = 0; i < 1; i += 0.1) {
+  //    new_obstacle.pipe_height = 1.5;
+  //    new_obstacle.pipe_radius = 0.7;
+  //    new_obstacle.odom.pose.pose.position.x = 12.5 + i;
+  //    new_obstacle.odom.pose.pose.position.y = 7.8 + 0.2*i;
+  //    new_obstacle.odom.pose.pose.position.z = 0;
+  //    obstacles.obstacles.push_back(new_obstacle);
+  //}
+
+  //generateVoxelMap(map, obstacles);
 
   //Initialize map util 
   std::shared_ptr<MPL::VoxelMapUtil> map_util(new MPL::VoxelMapUtil);
   setMap(map_util, map);
 
   //Free unknown space and dilate obstacles
-  map_util->freeUnknown();
+//  map_util->freeUnknown();
   //map_util->dilate(0.2, 0.1);
-  //map_util->dilating();
-
 
   //Publish the dilated map for visualization
   getMap(map_util, map);
@@ -96,7 +177,8 @@ int main(int argc, char ** argv){
   start.acc = Vec3f(0, 0, 0);
   start.use_pos = true;
   start.use_vel = true;
-  start.use_acc = false;
+  start.use_acc = true;
+  start.use_jrk = false;
 
   Waypoint3 goal;
   goal.pos = Vec3f(goal_x, goal_y, goal_z);
@@ -105,51 +187,46 @@ int main(int argc, char ** argv){
   goal.use_pos = start.use_pos;
   goal.use_vel = start.use_vel;
   goal.use_acc = start.use_acc;
-
-
+  goal.use_jrk = start.use_jrk;
 
   //Initialize planner
-  double dt, v_max, a_max, u_max;
+  double dt, eps, v_max, a_max, j_max, u_max;
   int max_num, num, ndt;
-  bool use_3d;
-  nh.param("dt", dt, 1.0);
-  nh.param("ndt", ndt, -1);
-  nh.param("v_max", v_max, 2.0);
-  nh.param("a_max", a_max, 1.0);
-  nh.param("u_max", u_max, 1.0);
+  nh.getParam("dt", dt);
+  nh.getParam("eps", eps);
+  nh.getParam("ndt", ndt);
+  nh.getParam("v_max", v_max);
+  nh.getParam("a_max", a_max);
+  nh.getParam("j_max", j_max);
+  nh.getParam("u_max", u_max);
   nh.param("max_num", max_num, -1);
-  nh.param("num", num, 1);
-  nh.param("use_3d", use_3d, false);
+  nh.getParam("num", num);
+
+  double p_tol, v_tol, a_tol;
+  nh.getParam("p_tol", p_tol);
+  nh.getParam("v_tol", v_tol);
+  nh.getParam("a_tol", a_tol);
 
   vec_Vec3f U;
   const decimal_t du = u_max / num;
-  if(use_3d) {
-    decimal_t du_z = u_max / num;
-    for(decimal_t dx = -u_max; dx <= u_max; dx += du ) 
-      for(decimal_t dy = -u_max; dy <= u_max; dy += du )
-        for(decimal_t dz = -u_max; dz <= u_max; dz += du_z ) //here we reduce the z control
-          U.push_back(Vec3f(dx, dy, dz));
-  }
-  else {
-    for(decimal_t dx = -u_max; dx <= u_max; dx += du ) 
-      for(decimal_t dy = -u_max; dy <= u_max; dy += du )
-        U.push_back(Vec3f(dx, dy, 0));
-  }
- 
+  for (decimal_t dx = -u_max; dx <= u_max; dx += du)
+    for (decimal_t dy = -u_max; dy <= u_max; dy += du)
+      for (decimal_t dz = -u_max; dz <= u_max; dz += du)
+        U.push_back(Vec3f(dx, dy, dz));
 
   std::unique_ptr<MPMap3DUtil> planner_ptr;
 
   planner_ptr.reset(new MPMap3DUtil(true));
   planner_ptr->setMapUtil(map_util); // Set collision checking function
-  planner_ptr->setEpsilon(1.0); // Set greedy param (default equal to 1)
+  planner_ptr->setEpsilon(eps); // Set greedy param (default equal to 1)
   planner_ptr->setVmax(v_max); // Set max velocity
   planner_ptr->setAmax(a_max); // Set max acceleration (as control input)
   planner_ptr->setUmax(u_max);// 2D discretization with 1
   planner_ptr->setDt(dt); // Set dt for each primitive
   planner_ptr->setTmax(ndt * dt); // Set the planning horizon: n*dt
   planner_ptr->setMaxNum(max_num); // Set maximum allowed expansion, -1 means no limitation
-  planner_ptr->setU(U);// 2D discretization with 1
-  planner_ptr->setTol(1, 1, 1); // Tolerance for goal region
+  planner_ptr->setU(U);
+  planner_ptr->setTol(p_tol, v_tol, a_tol); // Tolerance for goal region
 
 
   //Publish location of start and goal
@@ -210,7 +287,7 @@ int main(int argc, char ** argv){
 
   printf("================ Refined traj -- total J: %f, total time: %f\n", traj_refined.J(2), traj_refined.getTotalTime());
 
-  ros::spin();
+  //ros::spin();
 
   return 0;
 }
