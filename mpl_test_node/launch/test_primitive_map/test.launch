@@ -39,7 +39,7 @@
     <param name="ndt" value="1000"/>
 
     <param name="eps" value="10.0" />
-    <param name="num" value="3" /> <!-- control discretization -->
+    <param name="num" value="2" /> <!-- control discretization -->
   </node>
 
 </launch>
