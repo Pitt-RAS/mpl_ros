@@ -159,8 +159,6 @@ int main(int argc, char** argv) {
   std::shared_ptr<MPL::VoxelMapUtil> map_util(new MPL::VoxelMapUtil);
   setMap(map_util, map);
 
-  map_util->info();
-
   // Free unknown space and dilate obstacles
   map_util->freeUnknown();
   // map_util->dilate(0.2, 0.1);
@@ -174,7 +172,7 @@ int main(int argc, char** argv) {
   try {
     // Set start and goal
     double start_x, start_y, start_z;
-    nh.param("start_x", start_x, 12.5);
+    nh.param("start_x", start_x, 10.5);
     nh.param("start_y", start_y, 1.4);
     nh.param("start_z", start_z, 0.0);
     double start_vx, start_vy, start_vz;
@@ -188,17 +186,17 @@ int main(int argc, char** argv) {
 
     Waypoint3 start;
     start.pos = Vec3f(start_x, start_y, start_z);
-    start.vel = Vec3f(.5, .5, .1);
+    start.vel = Vec3f(start_vx, start_vy, start_vz);
     start.acc = Vec3f(0, 0, 0);
     start.use_pos = true;
-    start.use_vel = false;
-    start.use_acc = false;
+    start.use_vel = true;
+    start.use_acc = true;
     start.use_jrk = false;
 
     Waypoint3 goal;
     goal.pos = Vec3f(goal_x, goal_y, goal_z);
-    goal.vel = Vec3f(1, 1, 1);
-    goal.acc = Vec3f(0, 0, 0);
+    goal.vel = Vec3f(0, 0, 0);
+    goal.acc = Vec3f(1, 1, 0.2);
     goal.use_pos = start.use_pos;
     goal.use_vel = start.use_vel;
     goal.use_acc = start.use_acc;
@@ -237,60 +235,14 @@ int main(int argc, char** argv) {
     planner_ptr->setMapUtil(map_util);  // Set collision checking function
     planner_ptr->setEpsilon(eps);       // Set greedy param (default equal to 1)
     planner_ptr->setVmax(v_max);        // Set max velocity
-    // planner_ptr->setAmax(a_max); // Set max acceleration (as control input)
+    planner_ptr->setAmax(a_max);     // Set max acceleration (as control input)
     planner_ptr->setUmax(u_max);     // 2D discretization with 1
     planner_ptr->setDt(dt);          // Set dt for each primitive
     planner_ptr->setTmax(ndt * dt);  // Set the planning horizon: n*dt
-    planner_ptr->setMaxNum(200000);  // Set maximum allowed expansion, -1 means no limitation
+    planner_ptr->setMaxNum(
+        200000);  // Set maximum allowed expansion, -1 means no limitation
     planner_ptr->setU(U);
     planner_ptr->setTol(p_tol);  // Tolerance for goal region
-
-    // Planning thread!
-    ros::Time t0 = ros::Time::now();
-    bool valid = planner_ptr->plan(start, goal);
-
-    if (!valid) {
-      ROS_WARN("Failed! Takes %f sec for planning, expand [%zu] nodes",
-               (ros::Time::now() - t0).toSec(),
-               planner_ptr->getCloseSet().size());
-    } else {
-      ROS_INFO("Succeed! Takes %f sec for planning, expand [%zu] nodes",
-               (ros::Time::now() - t0).toSec(),
-               planner_ptr->getCloseSet().size());
-    }
-
-    auto traj = planner_ptr->getTraj();
-
-    U.clear();
-    u_max = u_max1;
-
-    const decimal_t du2 = u_max / num;
-    for (decimal_t dx = -u_max; dx <= u_max; dx += du2)
-      for (decimal_t dy = -u_max; dy <= u_max; dy += du2)
-        for (decimal_t dz = -u_max; dz <= u_max; dz += du2)
-          U.push_back(Vec3f(dx, dy, dz));
-
-    // reset planner
-    planner_ptr->setU(U);
-    planner_ptr->setUmax(u_max);  // 2D discretization with 1
-    planner_ptr->setAmax(a_max);  // Set max acceleration (as control input)
-    // planner_ptr->setPriorTrajectory(traj);
-
-    start.pos = Vec3f(start_x, start_y, start_z);
-    start.vel = Vec3f(start_vx, start_vy, start_vz);
-    start.acc = Vec3f(0, 0, 0);
-    start.use_pos = true;
-    start.use_vel = true;
-    start.use_acc = true;
-    start.use_jrk = false;
-
-    goal.pos = Vec3f(goal_x, goal_y, goal_z);
-    goal.vel = Vec3f(0, 0, 0);
-    goal.acc = Vec3f(1, 1, 0.2);
-    goal.use_pos = start.use_pos;
-    goal.use_vel = start.use_vel;
-    goal.use_acc = start.use_acc;
-    goal.use_jrk = start.use_jrk;
 
     // Publish location of start and goal
     sensor_msgs::PointCloud sg_cloud;
@@ -302,8 +254,8 @@ int main(int argc, char** argv) {
     sg_pub.publish(sg_cloud);
 
     // Planning thread!
-    t0 = ros::Time::now();
-    valid = planner_ptr->plan(start, goal);
+    ros::Time t0 = ros::Time::now();
+    bool valid = planner_ptr->plan(start, goal);
 
     // Publish expanded nodes
     sensor_msgs::PointCloud ps = vec_to_cloud(planner_ptr->getCloseSet());
@@ -314,7 +266,7 @@ int main(int argc, char** argv) {
     planning_ros_msgs::Primitives prs_msg =
         toPrimitivesROSMsg(planner_ptr->getPrimitivesToGoal());
     prs_msg.header = header;
-    // prs_pub.publish(prs_msg);
+    prs_pub.publish(prs_msg);
 
     if (!valid) {
       ROS_WARN("Failed! Takes %f sec for planning, expand [%zu] nodes",
@@ -327,36 +279,14 @@ int main(int argc, char** argv) {
     }
 
     // Publish trajectory
-    traj = planner_ptr->getTraj();
+    auto traj = planner_ptr->getTraj();
     planning_ros_msgs::Trajectory traj_msg = toTrajectoryROSMsg(traj);
     traj_msg.header = header;
-    // traj_pub.publish(traj_msg);
+    traj_pub.publish(traj_msg);
 
     printf("==================  Raw traj -- total J: %f, total time: %f\n",
            traj.J(2), traj.getTotalTime());
 
-    // Get intermediate waypoints
-    vec_E<Waypoint3> waypoints = planner_ptr->getWs();
-
-    // Get time allocation
-    std::vector<decimal_t> dts;
-    dts.resize(waypoints.size() - 1, dt);
-
-    // Generate higher order polynomials
-    PolySolver3 poly_solver(2, 3);
-    poly_solver.solve(waypoints, dts);
-
-    auto traj_refined =
-        Trajectory3(poly_solver.getTrajectory()->toPrimitives());
-
-    // Publish refined trajectory
-    planning_ros_msgs::Trajectory refined_traj_msg =
-        toTrajectoryROSMsg(traj_refined);
-    refined_traj_msg.header = header;
-    // refined_traj_pub.publish(refined_traj_msg);
-
-    printf("================ Refined traj -- total J: %f, total time: %f\n",
-           traj_refined.J(2), traj_refined.getTotalTime());
   } catch (const std::exception& e) {
     ROS_ERROR("Exception: %s", e.what());
     return 0;

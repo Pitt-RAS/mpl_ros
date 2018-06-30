@@ -3,7 +3,7 @@
   <!--<arg name="debug_valgrind" default="false"/>-->
 
   <arg name="prefix" value="" unless="$(arg debug)"/>
-  <arg name="prefix" value="valgrind --tool=callgrind" if="$(arg debug)"/>
+  <arg name="prefix" value="valgrind" if="$(arg debug)"/>
 
   <node pkg="mpl_test_node"
         type="test_primitive_map"
@@ -12,7 +12,7 @@
         launch-prefix="$(arg prefix)">
 
     <!-- Set start and goal -->
-    <param name="start_x" value="12.5"/>
+    <param name="start_x" value="10.5"/>
     <param name="start_y" value="5.4"/>
     <param name="start_z" value="1.0"/>
 
@@ -35,11 +35,11 @@
     <param name="v_tol" value="0.2" />
     <param name="a_tol" value="0.5" />
 
-    <param name="dt" value="0.2"/>
+    <param name="dt" value="0.25"/>
     <param name="ndt" value="1000"/>
 
     <param name="eps" value="10.0" />
-    <param name="num" value="2" /> <!-- control discretization -->
+    <param name="num" value="1" /> <!-- control discretization -->
   </node>
 
 </launch>
