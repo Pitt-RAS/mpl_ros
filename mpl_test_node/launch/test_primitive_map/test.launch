@@ -35,7 +35,7 @@
     <param name="v_tol" value="0.2" />
     <param name="a_tol" value="0.5" />
 
-    <param name="dt" value="0.25"/>
+    <param name="dt" value="0.26"/>
     <param name="ndt" value="1000"/>
 
     <param name="eps" value="10.0" />
