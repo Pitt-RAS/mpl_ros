@@ -7,17 +7,20 @@
 
 class VoxelGrid {
  public:
-  VoxelGrid(Vec3f origin, Vec3f dim, float res);
+  VoxelGrid(std::array<decimal_t, 3> origin, std::array<decimal_t, 3> dim, float res);
   void clear();
 
   vec_Vec3f getCloud();
   vec_Vec3f getLocalCloud(const Vec3f& pos, const Vec3f& ori, const Vec3f& dim);
   planning_ros_msgs::VoxelMap getMap();
+  void getMap(planning_ros_msgs::VoxelMap& voxel_map);
+
   planning_ros_msgs::VoxelMap getInflatedMap();
 
-  bool allocate(const Vec3f &new_dim_d, const Vec3f &new_ori_d);
+  bool allocate(const std::array<decimal_t, 3> &new_dim_d, const std::array<decimal_t, 3> &new_ori_d);
 
   void addCloud(const vec_Vec3f &pts);
+  void addCloud(const std::vector<std::array<decimal_t, 3>, Eigen::aligned_allocator<std::array<decimal_t, 3>>> &pts);
 
   vec_Vec3i addCloud(const vec_Vec3f &pts, const vec_Vec3i& ns);
 
@@ -26,14 +29,18 @@ class VoxelGrid {
   void fill(int nx, int ny);
   void fill(int nx, int ny, int nz);
   void clear(int nx, int ny);
+
  private:
+  std::array<int, 3> floatToInt(const std::array<decimal_t, 3> &pt);
   Vec3i floatToInt(const Vec3f& pt);
   Vec3f intToFloat(const Vec3i &pn);
   bool isOutSide(const Vec3i &pn);
+  bool isOutSide(const std::array<int, 3> &pn);
 
-  Vec3i dim_;
-  Vec3i origin_;
-  Vec3f origin_d_;
+
+  std::array<decimal_t, 3> dim_;
+  std::array<decimal_t, 3> origin_;
+  std::array<decimal_t, 3> origin_d_;
   float res_;
   boost::multi_array<char, 3> map_;
   boost::multi_array<char, 3> inflated_map_;

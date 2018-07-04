@@ -8,98 +8,6 @@
 
 #include <iarc7_msgs/ObstacleArray.h>
 
-void generateVoxelMap(planning_ros_msgs::VoxelMap& voxel_map,
-                      const iarc7_msgs::ObstacleArray& obstacles) {
-  ros::Time t1 = ros::Time::now();
-
-  sensor_msgs::PointCloud cloud;
-
-  // Generate cloud from obstacle data
-  ROS_INFO("Number of obstacles: [%zu]", obstacles.obstacles.size());
-  cloud.header.stamp = ros::Time::now();
-  cloud.header.frame_id = "cloud";
-  cloud.channels.resize(1);
-
-  Vec3f voxel_map_origin;
-  voxel_map_origin(0) = voxel_map.origin.x;
-  voxel_map_origin(1) = voxel_map.origin.y;
-  voxel_map_origin(2) = voxel_map.origin.z;
-
-  ROS_INFO("Mapping obstacles to the cloud");
-  for (auto& obstacle : obstacles.obstacles) {
-    // Map each obstacle to the cloud
-
-    float pipe_radius = obstacle.pipe_radius;
-    float pipe_height = obstacle.pipe_height;
-    float pipe_x = obstacle.odom.pose.pose.position.x;
-    float pipe_y = obstacle.odom.pose.pose.position.y;
-    float px, py, pz;
-    for (pz = voxel_map_origin(2); pz <= pipe_height; pz += 0.1) {
-      for (float theta = 0; theta < 2 * M_PI; theta += 0.15) {
-        for (float r = pipe_radius - voxel_map.resolution; r < pipe_radius;
-             r += voxel_map.resolution) {
-          px = r * cos(theta) + pipe_x + voxel_map_origin(0);
-          py = r * sin(theta) + pipe_y + voxel_map_origin(1);
-          geometry_msgs::Point32 point;
-          point.x = px;
-          point.y = py;
-          point.z = pz;
-          cloud.points.push_back(point);
-        }
-      }
-    }
-  }
-
-  ROS_INFO("Takes %f sec for mapping obstalces",
-           (ros::Time::now() - t1).toSec());
-
-  t1 = ros::Time::now();
-
-  vec_Vec3f pts = cloud_to_vec(cloud);
-
-  ROS_INFO("Takes %f sec for cloud to vec", (ros::Time::now() - t1).toSec());
-
-  Vec3f voxel_map_dim;
-  voxel_map_dim(0) = voxel_map.dim.x * voxel_map.resolution;
-  voxel_map_dim(1) = voxel_map.dim.y * voxel_map.resolution;
-  voxel_map_dim(2) = voxel_map.dim.z * voxel_map.resolution;
-
-  std::unique_ptr<VoxelGrid> voxel_grid(
-      new VoxelGrid(voxel_map_origin, voxel_map_dim, voxel_map.resolution));
-  voxel_grid->addCloud(pts);
-
-  voxel_map = voxel_grid->getMap();
-  voxel_map.header = cloud.header;
-}
-
-void setMap(std::shared_ptr<MPL::VoxelMapUtil>& map_util,
-            const planning_ros_msgs::VoxelMap& msg) {
-  Vec3f ori(msg.origin.x, msg.origin.y, msg.origin.z);
-  Vec3i dim(msg.dim.x, msg.dim.y, msg.dim.z);
-  decimal_t res = msg.resolution;
-  std::vector<signed char> map = msg.data;
-
-  map_util->setMap(ori, dim, map, res);
-}
-
-void getMap(std::shared_ptr<MPL::VoxelMapUtil>& map_util,
-            planning_ros_msgs::VoxelMap& map) {
-  Vec3f ori = map_util->getOrigin();
-  Vec3i dim = map_util->getDim();
-  decimal_t res = map_util->getRes();
-
-  map.origin.x = ori(0);
-  map.origin.y = ori(1);
-  map.origin.z = ori(2);
-
-  map.dim.x = dim(0);
-  map.dim.y = dim(1);
-  map.dim.z = dim(2);
-  map.resolution = res;
-
-  map.data = map_util->getMap();
-}
-
 int main(int argc, char** argv) {
   ros::init(argc, argv, "test");
   ros::NodeHandle nh("~");
@@ -128,9 +36,9 @@ int main(int argc, char** argv) {
   map.origin.x = 0.0;
   map.origin.y = 0.0;
   map.origin.z = 0.0;
-  map.dim.x = 179.0;
-  map.dim.y = 179.0;
-  map.dim.z = 39.0;
+  map.dim.x = 80.0; // (80 * .25 res)
+  map.dim.y = 80.0;
+  map.dim.z = 12.0;
   std::vector<int8_t> data(map.dim.x * map.dim.y * map.dim.z, 0);
   map.data = data;
 
@@ -153,26 +61,77 @@ int main(int argc, char** argv) {
     obstacles.obstacles.push_back(new_obstacle);
   }
 
-  generateVoxelMap(map, obstacles);
+  sensor_msgs::PointCloud cloud;
+
+  // Generate cloud from obstacle data
+  ROS_INFO("Number of obstacles: [%zu]", obstacles.obstacles.size());
+  cloud.header.stamp = ros::Time::now();
+  cloud.header.frame_id = "cloud";
+  cloud.channels.resize(1);
+
+  std::array<decimal_t, 3> voxel_map_origin =
+  {map.origin.x, map.origin.y, map.origin.z};
+
+  ROS_INFO("Mapping obstacles to the cloud");
+  for (auto& obstacle : obstacles.obstacles) {
+    // Map each obstacle to the cloud
+    float pipe_radius = obstacle.pipe_radius;
+    float pipe_height = obstacle.pipe_height;
+    float pipe_x = obstacle.odom.pose.pose.position.x;
+    float pipe_y = obstacle.odom.pose.pose.position.y;
+    float px, py, pz;
+    for (pz = voxel_map_origin[2]; pz <= pipe_height; pz += 0.1) {
+      for (float theta = 0; theta < 2 * M_PI; theta += 0.15) {
+        for (float r = pipe_radius - map.resolution; r < pipe_radius; r += map.resolution) {
+          px = r * std::cos(theta) + pipe_x + voxel_map_origin[0];
+          py = r * std::sin(theta) + pipe_y + voxel_map_origin[1];
+          geometry_msgs::Point32 point;
+          point.x = px;
+          point.y = py;
+          point.z = pz;
+          cloud.points.push_back(point);
+        }
+      }
+    }
+  }
+
+  vec_Vec3f pts = cloud_to_vec(cloud);
+
+  std::array<decimal_t, 3> voxel_map_dim =
+  {map.dim.x * map.resolution,
+   map.dim.y * map.resolution,
+   map.dim.z * map.resolution};
+
+  std::unique_ptr<VoxelGrid> voxel_grid(new VoxelGrid(voxel_map_origin, voxel_map_dim, map.resolution));
+  voxel_grid->addCloud(pts);
+
+  voxel_grid->getMap(map);
+  map.header = cloud.header;
 
   // Initialize map util
   std::shared_ptr<MPL::VoxelMapUtil> map_util(new MPL::VoxelMapUtil);
-  setMap(map_util, map);
+
+  Vec3f ori(map.origin.x, map.origin.y, map.origin.z);
+  Vec3i dim(map.dim.x, map.dim.y, map.dim.z);
+  decimal_t res = map.resolution;
+  //std::vector<signed char> map_array = map.data;
+
+  map_util->setMap(ori, dim, map.data, res);
 
   // Free unknown space and dilate obstacles
-  map_util->freeUnknown();
+  // map_util->freeUnknown();
   // map_util->dilate(0.2, 0.1);
 
   ROS_INFO("Takes %f sec for building map", (ros::Time::now() - t1).toSec());
 
   // Publish the dilated map for visualization
-  getMap(map_util, map);
   map.header = header;
   map_pub.publish(map);
+
   try {
     // Set start and goal
     double start_x, start_y, start_z;
-    nh.param("start_x", start_x, 10.5);
+    nh.param("start_x", start_x, 1.4);
     nh.param("start_y", start_y, 1.4);
     nh.param("start_z", start_z, 0.0);
     double start_vx, start_vy, start_vz;
@@ -239,8 +198,7 @@ int main(int argc, char** argv) {
     planner_ptr->setUmax(u_max);     // 2D discretization with 1
     planner_ptr->setDt(dt);          // Set dt for each primitive
     planner_ptr->setTmax(ndt * dt);  // Set the planning horizon: n*dt
-    planner_ptr->setMaxNum(
-        200000);  // Set maximum allowed expansion, -1 means no limitation
+    planner_ptr->setMaxNum(200000);  // Set maximum allowed expansion, -1 means no limitation
     planner_ptr->setU(U);
     planner_ptr->setTol(p_tol);  // Tolerance for goal region
 

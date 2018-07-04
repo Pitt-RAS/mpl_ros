@@ -15,10 +15,7 @@ include_directories(${EIGEN3_INCLUDE_DIR} ${MOTION_PRIMITIVE_LIBRARY_INCLUDE_DIR
 
 cs_add_executable(test_primitive_map src/test_primitive_map.cpp)
 target_link_libraries(test_primitive_map ${MOTION_PRIMITIVE_LIBRARY_LIBRARIES})
-cs_add_executable(test_primitive_replan src/test_primitive_replan.cpp)
-target_link_libraries(test_primitive_replan ${MOTION_PRIMITIVE_LIBRARY_LIBRARIES})
-cs_add_executable(test_primitive_cloud src/test_primitive_cloud.cpp)
-target_link_libraries(test_primitive_cloud ${MOTION_PRIMITIVE_LIBRARY_LIBRARIES})
+
 
 cs_install()
 
