@@ -45,21 +45,12 @@ int main(int argc, char** argv) {
   iarc7_msgs::ObstacleArray obstacles;
 
   iarc7_msgs::Obstacle new_obstacle;
-  new_obstacle.pipe_height = 2.0;
-  new_obstacle.pipe_radius = 1.0;
-  new_obstacle.odom.pose.pose.position.x = 9;
-  new_obstacle.odom.pose.pose.position.y = 11;
-  new_obstacle.odom.pose.pose.position.z = 0;
+  new_obstacle.pipe_height = 4.0;
+  new_obstacle.pipe_radius = 1;
+  new_obstacle.odom.pose.pose.position.x = 0.5;
+  new_obstacle.odom.pose.pose.position.y = 0.5;
+  new_obstacle.odom.pose.pose.position.z = 0.0;
   obstacles.obstacles.push_back(new_obstacle);
-
-  for (double i = 0; i < 2; i += 0.8) {
-    new_obstacle.pipe_height = 1.5;
-    new_obstacle.pipe_radius = 0.7;
-    new_obstacle.odom.pose.pose.position.x = 9 - i * 2;
-    new_obstacle.odom.pose.pose.position.y = 9 + 0.5 * i;
-    new_obstacle.odom.pose.pose.position.z = 0;
-    obstacles.obstacles.push_back(new_obstacle);
-  }
 
   sensor_msgs::PointCloud cloud;
 
@@ -82,7 +73,7 @@ int main(int argc, char** argv) {
     float px, py, pz;
     for (pz = voxel_map_origin[2]; pz <= pipe_height; pz += 0.1) {
       for (float theta = 0; theta < 2 * M_PI; theta += 0.15) {
-        for (float r = pipe_radius - map.resolution; r < pipe_radius; r += map.resolution) {
+        for (float r = 0; r < pipe_radius; r += map.resolution) {
           px = r * std::cos(theta) + pipe_x + voxel_map_origin[0];
           py = r * std::sin(theta) + pipe_y + voxel_map_origin[1];
           geometry_msgs::Point32 point;
