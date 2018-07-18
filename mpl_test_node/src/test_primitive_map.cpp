@@ -6,6 +6,9 @@
 #include <planning_ros_utils/voxel_grid.h>
 #include <ros/ros.h>
 
+#include <iostream>
+#include <fstream>
+
 #include <iarc7_msgs/ObstacleArray.h>
 
 int main(int argc, char** argv) {
@@ -47,8 +50,8 @@ int main(int argc, char** argv) {
   iarc7_msgs::Obstacle new_obstacle;
   new_obstacle.pipe_height = 4.0;
   new_obstacle.pipe_radius = 1;
-  new_obstacle.odom.pose.pose.position.x = 0.5;
-  new_obstacle.odom.pose.pose.position.y = 0.5;
+  new_obstacle.odom.pose.pose.position.x = 12;
+  new_obstacle.odom.pose.pose.position.y = 12;
   new_obstacle.odom.pose.pose.position.z = 0.0;
   obstacles.obstacles.push_back(new_obstacle);
 
@@ -73,7 +76,7 @@ int main(int argc, char** argv) {
     float px, py, pz;
     for (pz = voxel_map_origin[2]; pz <= pipe_height; pz += 0.1) {
       for (float theta = 0; theta < 2 * M_PI; theta += 0.15) {
-        for (float r = 0; r < pipe_radius; r += map.resolution) {
+        for (float r = pipe_radius-map.resolution; r < pipe_radius; r += map.resolution) {
           px = r * std::cos(theta) + pipe_x + voxel_map_origin[0];
           py = r * std::sin(theta) + pipe_y + voxel_map_origin[1];
           geometry_msgs::Point32 point;
@@ -122,17 +125,17 @@ int main(int argc, char** argv) {
   try {
     // Set start and goal
     double start_x, start_y, start_z;
-    nh.param("start_x", start_x, 1.4);
-    nh.param("start_y", start_y, 1.4);
-    nh.param("start_z", start_z, 0.0);
+    nh.param("start_x", start_x, 10.0);
+    nh.param("start_y", start_y, 10.0);
+    nh.param("start_z", start_z, 0.5);
     double start_vx, start_vy, start_vz;
-    nh.param("start_vx", start_vx, 0.5);
-    nh.param("start_vy", start_vy, 0.5);
-    nh.param("start_vz", start_vz, 0.1);
+    nh.param("start_vx", start_vx, 0.0);
+    nh.param("start_vy", start_vy, 0.0);
+    nh.param("start_vz", start_vz, 0.0);
     double goal_x, goal_y, goal_z;
-    nh.param("goal_x", goal_x, 6.4);
-    nh.param("goal_y", goal_y, 16.6);
-    nh.param("goal_z", goal_z, 0.0);
+    nh.param("goal_x", goal_x, 11.0);
+    nh.param("goal_y", goal_y, 11.0);
+    nh.param("goal_z", goal_z, 0.8);
 
     Waypoint3 start;
     start.pos = Vec3f(start_x, start_y, start_z);
@@ -146,14 +149,14 @@ int main(int argc, char** argv) {
     Waypoint3 goal;
     goal.pos = Vec3f(goal_x, goal_y, goal_z);
     goal.vel = Vec3f(0, 0, 0);
-    goal.acc = Vec3f(1, 1, 0.2);
+    goal.acc = Vec3f(0, 0, 0);
     goal.use_pos = start.use_pos;
     goal.use_vel = start.use_vel;
     goal.use_acc = start.use_acc;
     goal.use_jrk = start.use_jrk;
 
     // Initialize planner
-    double dt, eps, v_max, a_max, j_max, u_max1, u_max;
+    double dt, eps, v_max, a_max, j_max, u_max;
     int max_num, num, ndt;
     nh.getParam("dt", dt);
     nh.getParam("eps", eps);
@@ -170,28 +173,12 @@ int main(int argc, char** argv) {
     nh.getParam("v_tol", v_tol);
     nh.getParam("a_tol", a_tol);
 
-    u_max1 = u_max;
-    u_max = v_max;
-
     vec_Vec3f U;
     const decimal_t du = u_max / num;
     for (decimal_t dx = -u_max; dx <= u_max; dx += du)
       for (decimal_t dy = -u_max; dy <= u_max; dy += du)
         for (decimal_t dz = -u_max; dz <= u_max; dz += du)
           U.push_back(Vec3f(dx, dy, dz));
-
-    std::unique_ptr<MPMap3DUtil> planner_ptr;
-    planner_ptr.reset(new MPMap3DUtil(true));
-    planner_ptr->setMapUtil(map_util);  // Set collision checking function
-    planner_ptr->setEpsilon(eps);       // Set greedy param (default equal to 1)
-    planner_ptr->setVmax(v_max);        // Set max velocity
-    planner_ptr->setAmax(a_max);     // Set max acceleration (as control input)
-    planner_ptr->setUmax(u_max);     // 2D discretization with 1
-    planner_ptr->setDt(dt);          // Set dt for each primitive
-    planner_ptr->setTmax(ndt * dt);  // Set the planning horizon: n*dt
-    planner_ptr->setMaxNum(200000);  // Set maximum allowed expansion, -1 means no limitation
-    planner_ptr->setU(U);
-    planner_ptr->setTol(p_tol);  // Tolerance for goal region
 
     // Publish location of start and goal
     sensor_msgs::PointCloud sg_cloud;
@@ -202,40 +189,63 @@ int main(int argc, char** argv) {
     sg_cloud.points.push_back(pt1), sg_cloud.points.push_back(pt2);
     sg_pub.publish(sg_cloud);
 
-    // Planning thread!
-    ros::Time t0 = ros::Time::now();
-    bool valid = planner_ptr->plan(start, goal);
+    std::ofstream myfile("/home/andrew/out.txt");
 
-    // Publish expanded nodes
-    sensor_msgs::PointCloud ps = vec_to_cloud(planner_ptr->getCloseSet());
-    ps.header = header;
-    cloud_pub.publish(ps);
+    //myfile<<"success,dt,omega_obstacle,dist_obstacle,time_plan"<<std::endl;
+    myfile<<"success,dt,time_plan"<<std::endl;
 
-    // Publish primitives
-    planning_ros_msgs::Primitives prs_msg =
-        toPrimitivesROSMsg(planner_ptr->getPrimitivesToGoal());
-    prs_msg.header = header;
-    prs_pub.publish(prs_msg);
+    while(dt>=.08) {
+      std::unique_ptr<MPMap3DUtil> planner_ptr;
+      planner_ptr.reset(new MPMap3DUtil(true));
+      planner_ptr->setMapUtil(map_util);  // Set collision checking function
+      planner_ptr->setEpsilon(eps);       // Set greedy param (default equal to 1)
+      planner_ptr->setVmax(v_max);        // Set max velocity
+      planner_ptr->setAmax(a_max);     // Set max acceleration (as control input)
+      planner_ptr->setUmax(u_max);     // 2D discretization with 1
+      planner_ptr->setDt(dt);          // Set dt for each primitive
+      planner_ptr->setTmax(ndt * dt);  // Set the planning horizon: n*dt
+      planner_ptr->setMaxNum(-1);  // Set maximum allowed expansion, -1 means no limitation
+      planner_ptr->setU(U);
+      planner_ptr->setTol(p_tol);  // Tolerance for goal region
 
-    if (!valid) {
-      ROS_WARN("Failed! Takes %f sec for planning, expand [%zu] nodes",
-               (ros::Time::now() - t0).toSec(),
-               planner_ptr->getCloseSet().size());
-    } else {
-      ROS_INFO("Succeed! Takes %f sec for planning, expand [%zu] nodes",
-               (ros::Time::now() - t0).toSec(),
-               planner_ptr->getCloseSet().size());
+      double time_plan;
+
+      // Planning thread!
+      ros::Time t0 = ros::Time::now();
+      bool valid = planner_ptr->plan(start, goal);
+
+      time_plan = (ros::Time::now() - t0).toSec();
+
+      if (!valid) {
+        ROS_WARN("Failed! Takes %f sec for planning", time_plan);
+      } else {
+        ROS_INFO("Succeed! Takes %f sec for planning, expand [%zu] nodes",
+                 (ros::Time::now() - t0).toSec(),
+                 planner_ptr->getCloseSet().size());
+
+        myfile<<valid<<","<<dt<<","<<time_plan<<std::endl;
+
+        // // Publish expanded nodes
+        // sensor_msgs::PointCloud ps = vec_to_cloud(planner_ptr->getCloseSet());
+        // ps.header = header;
+        // cloud_pub.publish(ps);
+
+        // // Publish primitives
+        // planning_ros_msgs::Primitives prs_msg = toPrimitivesROSMsg(planner_ptr->getPrimitivesToGoal());
+        // prs_msg.header = header;
+        // prs_pub.publish(prs_msg);
+
+        // // Publish trajectory
+        // auto traj = planner_ptr->getTraj();
+        // planning_ros_msgs::Trajectory traj_msg = toTrajectoryROSMsg(traj);
+        // traj_msg.header = header;
+        // traj_pub.publish(traj_msg);
+
+        // printf("==================  Raw traj -- total J: %f, total time: %f\n", traj.J(2), traj.getTotalTime());
+
+      }
+      dt = dt - .01;
     }
-
-    // Publish trajectory
-    auto traj = planner_ptr->getTraj();
-    planning_ros_msgs::Trajectory traj_msg = toTrajectoryROSMsg(traj);
-    traj_msg.header = header;
-    traj_pub.publish(traj_msg);
-
-    printf("==================  Raw traj -- total J: %f, total time: %f\n",
-           traj.J(2), traj.getTotalTime());
-
   } catch (const std::exception& e) {
     ROS_ERROR("Exception: %s", e.what());
     return 0;

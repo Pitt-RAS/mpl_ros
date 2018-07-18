@@ -12,30 +12,30 @@
         launch-prefix="$(arg prefix)">
 
     <!-- Set start and goal -->
-    <param name="start_x" value="10.5"/>
-    <param name="start_y" value="5.4"/>
+    <param name="start_x" value="10"/>
+    <param name="start_y" value="10"/>
     <param name="start_z" value="1.0"/>
 
     <param name="start_vx" value="0.0"/>
     <param name="start_vy" value="0.0"/>
     <param name="start_vz" value="0.0"/>
 
-    <param name="goal_x" value="6.4"/>
-    <param name="goal_y" value="16.6"/>
-    <param name="goal_z" value="0.0"/>
+    <param name="goal_x" value="13"/>
+    <param name="goal_y" value="13"/>
+    <param name="goal_z" value="1"/>
 
     <!-- Set dynamic constraints -->
-    <param name="v_max" value="5.0" />
-    <param name="a_max" value="2.5" />
-    <param name="j_max" value="20.0" />
-    <param name="u_max" value="20.0" />
+    <param name="v_max" value="3.0" />
+    <param name="a_max" value="5.0" />
+    <param name="j_max" value="15.0" />
+    <param name="u_max" value="15.0" />
 
     <!-- Set goal tolerances -->
-    <param name="p_tol" value="0.2" />
+    <param name="p_tol" value="0.05" />
     <param name="v_tol" value="0.2" />
     <param name="a_tol" value="0.5" />
 
-    <param name="dt" value="0.26"/>
+    <param name="dt" value=".33"/>
     <param name="ndt" value="1000"/>
 
     <param name="eps" value="10.0" />
